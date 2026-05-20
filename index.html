@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IP Logger</title>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --ink: #1a1a2e;
+    --paper: #f5f0e8;
+    --accent: #c84b31;
+    --muted: #7a7060;
+    --border: #d5cfc2;
+  }
+
+  body {
+    font-family: 'DM Mono', monospace;
+    background: var(--paper);
+    color: var(--ink);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 39px,
+        rgba(0,0,0,0.04) 39px,
+        rgba(0,0,0,0.04) 40px
+      );
+    pointer-events: none;
+  }
+
+  .corner {
+    position: fixed;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    opacity: 0.5;
+    letter-spacing: 0.05em;
+  }
+  .corner.tl { top: 1.5rem; left: 1.5rem; }
+  .corner.tr { top: 1.5rem; right: 1.5rem; }
+  .corner.bl { bottom: 1.5rem; left: 1.5rem; }
+  .corner.br { bottom: 1.5rem; right: 1.5rem; }
+
+  /* Ocultar esquinas en pantallas muy pequeñas */
+  @media (max-width: 480px) {
+    .corner.tr, .corner.br { display: none; }
+    .corner.tl { font-size: 9px; }
+    .corner.bl { font-size: 9px; }
+  }
+
+  .card {
+    background: #fff;
+    border: 1px solid var(--border);
+    max-width: 560px;
+    width: 100%;
+    padding: 2.5rem 2rem;
+    position: relative;
+  }
+
+  @media (min-width: 600px) {
+    .card { padding: 3rem 3.5rem; }
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 6px; left: 6px; right: -6px; bottom: -6px;
+      border: 1px solid var(--border);
+      z-index: -1;
+    }
+  }
+
+  .tag {
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .tag::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--accent);
+    opacity: 0.3;
+  }
+
+  h1 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(1.8rem, 5vw, 2.8rem);
+    line-height: 1.15;
+    margin-bottom: 1rem;
+    color: var(--ink);
+  }
+  h1 em { font-style: italic; color: var(--accent); }
+
+  .subtitle {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.7;
+    margin-bottom: 2.5rem;
+    max-width: 38ch;
+  }
+
+  .ip-block {
+    background: var(--ink);
+    color: #e8e0d0;
+    padding: 1.25rem 1.5rem;
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    margin-bottom: 2rem;
+    position: relative;
+    min-height: 80px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .ip-block .label {
+    font-size: 9px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+
+  .ip-address {
+    font-size: clamp(16px, 5vw, 22px);
+    font-weight: 500;
+    color: #fff;
+    letter-spacing: 0.04em;
+    min-height: 1.4em;
+    word-break: break-all;
+  }
+
+  .ip-address.loading::after {
+    content: '▌';
+    animation: blink 0.8s step-end infinite;
+  }
+
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .meta-row {
+    display: flex;
+    gap: 1rem 2rem;
+    font-size: 11px;
+    color: #9090a0;
+    margin-top: 8px;
+    flex-wrap: wrap;
+  }
+  .meta-row span { display: flex; flex-direction: column; gap: 2px; }
+  .meta-row strong { color: #c8c0b0; font-weight: 400; }
+
+  .copy-btn {
+    position: absolute;
+    top: 1.25rem;
+    right: 1.25rem;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
+    color: #aaa;
+    padding: 5px 10px;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-transform: uppercase;
+    /* Área táctil más grande en móvil */
+    min-width: 44px;
+    min-height: 36px;
+  }
+  .copy-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+  .copy-btn.copied { color: #7fcd91; border-color: #7fcd91; }
+
+  /* Estado del envío al servidor */
+  .server-status {
+    font-size: 10px;
+    padding: 3px 0;
+    letter-spacing: 0.05em;
+    min-height: 16px;
+  }
+  .server-status.ok    { color: #7fcd91; }
+  .server-status.error { color: #c84b31; }
+  .server-status.sending { color: #9090a0; }
+
+  .log-section {
+    border-top: 1px solid var(--border);
+    padding-top: 1.5rem;
+  }
+
+  .log-title {
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .log-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 160px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  .log-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 11px;
+    padding: 6px 8px;
+    background: var(--paper);
+    border-left: 3px solid var(--accent);
+    animation: slideIn 0.3s ease;
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(-8px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+
+  .log-item .log-ip   { font-weight: 500; color: var(--ink); flex: 1; }
+  .log-item .log-time { color: var(--muted); font-size: 10px; white-space: nowrap; }
+  .log-item .log-flag { font-size: 14px; }
+
+  .footer-note {
+    margin-top: 1.5rem;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .dot {
+    width: 6px; height: 6px;
+    background: #4caf7d;
+    border-radius: 50%;
+    animation: pulse 2s ease-in-out infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: 0.5; transform: scale(0.8); }
+  }
+
+  .clear-btn {
+    margin-left: auto;
+    background: none;
+    border: 1px solid var(--border);
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    padding: 5px 10px;
+    cursor: pointer;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    transition: all 0.2s;
+    min-height: 32px;
+  }
+  .clear-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .header-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 1rem;
+  }
+</style>
+</head>
+<body>
+
+<span class="corner tl">IP LOGGER v2.0</span>
+<span class="corner tr" id="visit-count">visitas: 0</span>
+<span class="corner bl" id="current-time"></span>
+<span class="corner br">© 2026</span>
+
+<div class="card">
+  <div class="tag">Sistema de registro</div>
+
+  <h1>Tu conexión<br>está siendo <em>registrada</em></h1>
+  <p class="subtitle">Este portal registra la dirección IP de cada visitante de forma automática al acceder a la página.</p>
+
+  <div class="ip-block">
+    <button class="copy-btn" id="copyBtn" onclick="copyIP()">copiar</button>
+    <span class="label">Dirección IP detectada</span>
+    <div class="ip-address loading" id="ipDisplay"></div>
+    <div class="meta-row" id="metaInfo"></div>
+    <div class="server-status sending" id="serverStatus">Detectando IP...</div>
+  </div>
+
+  <div class="log-section">
+    <div class="header-row">
+      <span class="log-title">Registro de visitas</span>
+      <button class="clear-btn" onclick="clearLog()">limpiar</button>
+    </div>
+    <ul class="log-list" id="logList">
+      <li style="font-size:11px; color: var(--muted); padding: 6px 8px;">Esperando visitas...</li>
+    </ul>
+  </div>
+
+  <div class="footer-note">
+    <div class="dot"></div>
+    <span>Monitoreo activo en tiempo real</span>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+//  ▶ ÚNICA LÍNEA QUE DEBES CAMBIAR
+//    Pega aquí la URL .lhr.life que aparece al ejecutar start_backend.sh
+//    Ejemplo: 'https://abc123def456.lhr.life'
+// ══════════════════════════════════════════════════════════════
+const BACKEND_URL = 'http://51.21.232.118:5000/api/v1/log';
+// ══════════════════════════════════════════════════════════════
+
+let currentIP = '';
+let visitCount = parseInt(localStorage.getItem('ip_visit_count') || '0');
+
+// ── Reloj ──────────────────────────────────────────────────────
+function updateClock() {
+  document.getElementById('current-time').textContent =
+    new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+function updateVisitCount(n) {
+  document.getElementById('visit-count').textContent = `visitas: ${n}`;
+}
+updateVisitCount(visitCount);
+
+// ── Log local (localStorage) ───────────────────────────────────
+function loadLog()       { return JSON.parse(localStorage.getItem('ip_log') || '[]'); }
+function saveLog(log)    { localStorage.setItem('ip_log', JSON.stringify(log.slice(-50))); }
+
+function renderLog(log) {
+  const list = document.getElementById('logList');
+  if (log.length === 0) {
+    list.innerHTML = '<li style="font-size:11px; color: var(--muted); padding: 6px 8px;">Sin registros aún.</li>';
+    return;
+  }
+  list.innerHTML = [...log].reverse().map(entry => `
+    <li class="log-item">
+      <span class="log-flag">${entry.flag || '🌐'}</span>
+      <span class="log-ip">${entry.ip}</span>
+      <span class="log-time">${entry.time}</span>
+    </li>
+  `).join('');
+}
+
+// ── Copiar IP ──────────────────────────────────────────────────
+function copyIP() {
+  if (!currentIP) return;
+  // API moderna con fallback para móviles con permisos restringidos
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(currentIP).then(showCopied).catch(fallbackCopy);
+  } else {
+    fallbackCopy();
+  }
+}
+function fallbackCopy() {
+  const ta = document.createElement('textarea');
+  ta.value = currentIP;
+  ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0';
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand('copy');
+  document.body.removeChild(ta);
+  showCopied();
+}
+function showCopied() {
+  const btn = document.getElementById('copyBtn');
+  btn.textContent = '✓ copiado';
+  btn.classList.add('copied');
+  setTimeout(() => { btn.textContent = 'copiar'; btn.classList.remove('copied'); }, 2000);
+}
+
+function clearLog() {
+  localStorage.removeItem('ip_log');
+  renderLog([]);
+}
+
+// ── Bandera de país ────────────────────────────────────────────
+function toFlag(cc) {
+  if (!cc || cc.length !== 2) return '🌐';
+  return String.fromCodePoint(...[...cc.toUpperCase()].map(c => 0x1F1E0 + c.charCodeAt(0) - 65));
+}
+
+// ── Fetch con timeout ──────────────────────────────────────────
+async function tryFetch(url, transform) {
+  const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+  return transform(data);
+}
+
+// ── Envío al servidor ──────────────────────────────────────────
+async function reportarAlServidor(datos) {
+  const status = document.getElementById('serverStatus');
+  status.textContent = 'Enviando al servidor...';
+  status.className = 'server-status sending';
+
+  // Verificar que la URL fue configurada
+  if (BACKEND_URL.includes('TU-URL-AQUI')) {
+    status.textContent = '⚠ Configura BACKEND_URL en el HTML';
+    status.className = 'server-status error';
+    return;
+  }
+
+  try {
+    const resp = await fetch(BACKEND_URL, {
+      method: 'POST',
+      mode: 'cors',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(datos)
+    });
+
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const result = await resp.json();
+    status.textContent = '✓ ' + (result.message || 'Guardado en servidor');
+    status.className = 'server-status ok';
+  } catch (err) {
+    console.error('[IP Logger] Error enviando al servidor:', err);
+    status.textContent = '✗ No se pudo enviar al servidor (' + err.message + ')';
+    status.className = 'server-status error';
+  }
+}
+
+// ── Detección de IP con múltiples APIs ────────────────────────
+async function detectIP() {
+  const display = document.getElementById('ipDisplay');
+  const meta    = document.getElementById('metaInfo');
+
+  const apis = [
+    () => tryFetch('https://ipwho.is/', d => ({
+      ip:      d.ip,
+      country: d.country,
+      city:    d.city,
+      org:     d.connection?.org || d.connection?.isp || '—',
+      flag:    toFlag(d.country_code),
+      version: d.type || 'IPv4'
+    })),
+    () => tryFetch('https://ipapi.co/json/', d => ({
+      ip:      d.ip,
+      country: d.country_name,
+      city:    d.city,
+      org:     d.org || '—',
+      flag:    toFlag(d.country_code),
+      version: 'IPv' + (d.version || '4')
+    })),
+    () => tryFetch('https://freeipapi.com/api/json', d => ({
+      ip:      d.ipAddress,
+      country: d.countryName,
+      city:    d.cityName,
+      org:     '—',
+      flag:    toFlag(d.countryCode),
+      version: d.ipVersion === 6 ? 'IPv6' : 'IPv4'
+    })),
+  ];
+
+  let info = null;
+  for (const api of apis) {
+    try { info = await api(); if (info?.ip) break; }
+    catch (_) { continue; }
+  }
+
+  display.classList.remove('loading');
+
+  if (!info?.ip) {
+    display.textContent = 'No detectada';
+    meta.innerHTML = '<span style="color:#c84b31;font-size:11px;">No se pudo obtener la IP. Comprueba tu conexión.</span>';
+    document.getElementById('serverStatus').textContent = '';
+    return;
+  }
+
+  currentIP = info.ip;
+  display.textContent = currentIP;
+
+  meta.innerHTML = `
+    <span><strong>País</strong>${info.flag} ${info.country || '—'}</span>
+    <span><strong>Ciudad</strong>${info.city || '—'}</span>
+    <span><strong>ISP</strong>${(info.org || '').slice(0, 28)}</span>
+    <span><strong>Versión</strong>${info.version}</span>
+  `;
+
+  visitCount++;
+  localStorage.setItem('ip_visit_count', visitCount);
+  updateVisitCount(visitCount);
+
+  const timeStr = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const nuevoRegistro = {
+    ip:      currentIP,
+    time:    timeStr,
+    flag:    info.flag,
+    country: info.country,
+    city:    info.city,
+    org:     info.org,
+    version: info.version
+  };
+
+  const log = loadLog();
+  log.push(nuevoRegistro);
+  saveLog(log);
+  renderLog(log);
+
+  // Enviar al servidor Flask (escribe en registros_sistema.txt)
+  await reportarAlServidor(nuevoRegistro);
+}
+
+// ── Arranque ───────────────────────────────────────────────────
+renderLog(loadLog());
+detectIP();
+</script>
+</body>
+</html>
